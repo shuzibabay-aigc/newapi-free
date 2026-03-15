@@ -1,0 +1,56 @@
+name: Check for NewAPI Updates and Sync to Hugging Face Space
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check-and-update:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get latest NewAPI version
+        id: get_version
+        run: |
+          LATEST_VERSION=$(curl -s "https://api.github.com/repos/Calcium-Ion/new-api/releases/latest" | grep -oP '"tag_name": "\K[^"]+')
+          echo "Latest NewAPI version is: $LATEST_VERSION"
+          echo "version=$LATEST_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Get current version from Dockerfile
+        id: get_current_version
+        run: |
+          CURRENT_VERSION=$(grep -oP 'calciumion/new-api:\K[^ ]+' Dockerfile)
+          echo "Current version in Dockerfile is: $CURRENT_VERSION"
+          echo "version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+      - name: Compare versions and update Dockerfile
+        id: update_dockerfile
+        if: steps.get_version.outputs.version != steps.get_current_version.outputs.version && steps.get_version.outputs.version != ''
+        run: |
+          echo "New version found. Updating Dockerfile..."
+          sed -i "s/calciumion\/new-api:${{ steps.get_current_version.outputs.version }}/calciumion\/new-api:${{ steps.get_version.outputs.version }}/g" Dockerfile
+          echo "Dockerfile updated."
+          echo "updated=true" >> $GITHUB_OUTPUT
+
+      - name: Commit and push if Dockerfile was changed
+        if: steps.update_dockerfile.outputs.updated == 'true'
+        run: |
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add Dockerfile
+          git commit -m "chore: Update NewAPI to version ${{ steps.get_version.outputs.version }}"
+          git push
+
+      - name: Push to Hugging Face Space
+        if: steps.update_dockerfile.outputs.updated == 'true'
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git remote add space https://${{ github.repository_owner }}:${{ secrets.HF_TOKEN }}@huggingface.co/spaces/${{ github.repository_owner }}/newapi-free
+          git push space main --force
+          echo "Successfully synced to Hugging Face Space!"
