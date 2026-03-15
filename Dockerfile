@@ -8,3 +8,6 @@ ENV PORT=7860
 
 # 时区设置
 ENV TZ=Asia/Shanghai
+
+# 数据目录（用于 SQLite 或日志）
+VOLUME ["/data"]
