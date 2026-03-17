@@ -11,4 +11,8 @@ jobs:
     steps:
       - name: Huggingface Keep-Alive Ping
         run: |
-          curl "${{ vars.HF_SPACE_URL }}"
+          urls='${{ vars.HF_SPACE_URLS }}'
+          echo "$urls" | jq -r '.[]' | while read url; do
+            echo "Pinging: $url"
+            curl -s -o /dev/null -w "%{http_code}" "$url" && echo " - OK" || echo " - Failed"
+          done
